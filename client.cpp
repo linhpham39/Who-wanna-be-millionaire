@@ -105,6 +105,8 @@ int main() {
         std::cout << "Who want to be a millionaire" << std::endl;
         std::cout << "1. Start Game" << std::endl;
         std::cout << "2. Challenge another player" << std::endl;
+        std::cout << "3. Score board" << std::endl;
+        std::cout << "4. List online players" << std::endl;
         std::cout << "Other to quit" << std::endl;
         std::cin >> choice;
         std::cin.ignore(); // Add this line to discard the newline character
@@ -138,10 +140,13 @@ int main() {
                     std::cout << buffer << std::endl;
                     break;
                 }
+                else if(strcmp(buffer, "GAME_WON") == 0){
+                    std::cout << "Congratulations!  YOU WON! " << std::endl;
+                    break;
+                }
                 else{
                     // Decode the server's question message
                     Question question = decodeQuestion(buffer);
-
 
                     // Print the question
                     std::cout << "Level: " << question.level << std::endl;
@@ -163,7 +168,48 @@ int main() {
            
             break;
         case 2:
+            if (send(clientSocket, "GAME_CHALLENGE", strlen("GAME_CHALLENGE"), 0) <= 0) {
+                std::cerr << "Error sending GAME_CHALLENGE message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            memset(buffer, 0, BUFFER_SIZE);
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+                std::cerr << "Error receiving server message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            std::cout<<buffer<<std::endl;
             break;
+            break;
+        case 3:
+            if (send(clientSocket, "GET_SCOREBOARD", strlen("GET_SCOREBOARD"), 0) <= 0) {
+                std::cerr << "Error sending GET_SCOREBOARD message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            memset(buffer, 0, BUFFER_SIZE);
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+                std::cerr << "Error receiving server message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            std::cout<<buffer<<std::endl;
+            break;
+        case 4:
+            if (send(clientSocket, "GET_PLAYERS", strlen("GET_PLAYERS"), 0) <= 0) {
+                std::cerr << "Error sending GET_PLAYERS message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            memset(buffer, 0, BUFFER_SIZE);
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+                std::cerr << "Error receiving server message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
+            std::cout<<buffer<<std::endl;
+            break;        
 
 
         default:

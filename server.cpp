@@ -8,9 +8,15 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <algorithm>
+#include <fstream>
+#include "include/json.hpp"
+
 
 #define MAX_CLIENTS 20
 #define BUFFER_SIZE 1024
+#define NUM_QUESTIONS_PER_PLAY 3
+
+using json = nlohmann::json;
 
 std::mutex mutex;
 
@@ -24,20 +30,11 @@ struct Client {
 struct Question {
     int level;
     std::string content;
-    std::vector<std::string> answerList;
+    std::unordered_map<std::string,std::string> answerList;
     std::string correctAnswer;
 };
 
-
-std::vector<Question> questions = {
-    {1, "What is the capital of France?", {"London", "Paris", "Berlin", "Madrid"}, "Paris"},
-    {2, "Who wrote the novel 'Pride and Prejudice'?", {"Jane Austen", "Charles Dickens", "Mark Twain", "Leo Tolstoy"}, "Jane Austen"},
-    {3, "What is the chemical symbol for the element Gold?", {"Go", "Gd", "Au", "Ag"}, "Au"},
-    {4, "Which planet is known as the Red Planet?", {"Mars", "Venus", "Jupiter", "Saturn"}, "Mars"},
-    {5, "What is the largest ocean on Earth?", {"Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"}, "Pacific Ocean"}
-};
-
-
+std::vector<Question> questions;
 std::vector<Client> clients;
 
 
@@ -85,12 +82,24 @@ void handleClient(int clientSocket) {
         }
         else if (strcmp(buffer, "START_GAME") == 0)
         {
-            
+            //std::vector<int>
             int questionIndex = 0;
-
+            
             while (true) {
                 // Check if all questions have been sent
                 if (questionIndex >= questions.size()) {
+                    if (send(clientSocket, "GAME_WON", strlen("GAME_WON"), 0) <= 0) {
+                        std::cout << "Error sending GAME_WON message" << std::endl;
+                        break;
+                    }
+                    std::ofstream outputFile("scoreboard.txt", std::ios::app);
+                    if (outputFile.is_open()) {
+                        std::string content = client.name+","+std::to_string(client.score);
+                        outputFile << content << std::endl;
+                        outputFile.close();
+                    } else {
+                    std::cout << "Failed to open the file." << std::endl;
+                    }
                     break;
                 }
 
@@ -103,10 +112,10 @@ void handleClient(int clientSocket) {
                 std::string message = "Question Level: " + std::to_string(currentQuestion.level) + "\n";
                 message += currentQuestion.content + "\n";
 
-
-                for (const std::string& answer : currentQuestion.answerList) {
-                    message += answer + "\n";
+                for (const auto& pair : currentQuestion.answerList) {
+                    message += pair.first +": " +pair.second + "\n";
                 }
+
 
 
                 // Send the message to the client
@@ -145,6 +154,14 @@ void handleClient(int clientSocket) {
                         std::cout << "Error sending SCORE message" << std::endl;
                         break;
                     }
+                    std::ofstream outputFile("scoreboard.txt", std::ios::app);
+                    if (outputFile.is_open()) {
+                        std::string content = client.name+","+std::to_string(client.score);
+                        outputFile << content << std::endl;
+                        outputFile.close();
+                    } else {
+                    std::cout << "Failed to open the file." << std::endl;
+                    }
                     break;
                 }
 
@@ -153,6 +170,36 @@ void handleClient(int clientSocket) {
                 questionIndex++;
             }
         }
+        else if (strcmp(buffer, "GET_SCOREBOARD") == 0)
+        {
+            std::string message = "USER, SCORE \n";
+            std::ifstream inputFile("scoreboard.txt");
+            if (inputFile.is_open()) {
+                std::string line;
+                while (std::getline(inputFile, line)) {
+                    message += line +"\n";
+                }
+                if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
+                    std::cout << "Error sending SCORE message" << std::endl;
+                    break;
+                }
+                inputFile.close();
+            } else {
+                std::cout << "Failed to open the file." << std::endl;
+            }
+        }
+        else if (strcmp(buffer, "GET_PLAYERS") == 0)
+        {
+            std::string message = "LIST ONLINE PLAYERS \n";
+            for (const auto& client : clients) {
+                message += client.name +"\n";
+            }
+            if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
+                std::cout << "Error sending PLAYERS message" << std::endl;
+                break;
+            }
+        }
+
        
     }
 
@@ -169,12 +216,27 @@ void handleClient(int clientSocket) {
 
 
 int main() {
+    // Read questions file
+    std::ifstream f("questions_list.json");
+    json questions_data = json::parse(f)["all_questions"];
+    for (auto& q: questions_data){
+        Question question={
+            q["level"],
+            q["Question"],
+            {{"D",q["D"]},
+            {"C",q["C"]},
+            {"B",q["B"]},
+            {"A",q["A"]}},
+            q["correct_answer"]    
+        };
+        questions.emplace_back(question);
+    }
+
+    // Create socket 
     int serverSocket;
     int port = 5555;
     struct sockaddr_in serverAddr {};
 
-
-    // Create socket
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         std::cerr << "Socket creation failed" << std::endl;
         return -1;

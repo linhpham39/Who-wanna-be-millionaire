@@ -1,0 +1,54 @@
+{"all_questions":
+    [
+        {
+            "id": "1",
+            "Question": "What is the capital of France?",
+            "A": "Paris",
+            "B": "London",
+            "C": "Berlin",
+            "D": "Madrid",
+            "correct_answer": "A",
+            "level": 1
+        },
+        {
+            "id": "2",
+            "Question": "Which planet is known as the Red Planet",
+            "A": "Earth",
+            "B": "Venus",
+            "C": "Mars",
+            "D": "Jupiter",
+            "correct_answer": "C",
+            "level": 2
+        },
+        {
+            "id": "3",
+            "Question": "What is the chemical symbol for the element Gold?",
+            "A": "Go",
+            "B": "Gd",
+            "C": "Au",
+            "D": "Ag",
+            "correct_answer": "C",
+            "level": 3            
+        },
+        {
+            "id": "4",
+            "Question": "Who wrote the novel 'Pride and Prejudice'?",
+            "A": "Jane Austen",
+            "B": "Charles Dickens",
+            "C": "Mark Twain",
+            "D": "Leo Tolstoy",
+            "correct_answer": "A",
+            "level": 4            
+        },
+        {
+            "id": "5",
+            "Question": "What is the largest ocean on Earth?",
+            "A": "Atlantic Ocean",
+            "B": "Indian Ocean",
+            "C": "Arctic Ocean",
+            "D": "Pacific Ocean",
+            "correct_answer": "D",
+            "level": 5            
+        }   
+    ]
+}
