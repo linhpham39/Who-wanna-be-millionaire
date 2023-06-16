@@ -8,7 +8,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <algorithm>
+#include <random>
 #include <fstream>
+#include <unordered_set>
 #include "include/json.hpp"
 
 
@@ -37,6 +39,24 @@ struct Question {
 std::vector<Question> questions;
 std::vector<Client> clients;
 
+std::vector<int> genRandomQuestionsList(int k, int n) {
+    std::vector<int> questionList;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(0, n);
+    std::unordered_set<int> uniqueSet;
+
+    while (uniqueSet.size() < k) {
+        int randomNumber = dist(gen);
+        uniqueSet.insert(randomNumber);
+    }
+
+    for (int number : uniqueSet) {
+        questionList.push_back(number);
+    }
+
+    return questionList;
+}
 
 void handleClient(int clientSocket) {
     if (send(clientSocket, "Welcome Client", sizeof("Welcome Client"), 0) <= 0) {
@@ -82,12 +102,12 @@ void handleClient(int clientSocket) {
         }
         else if (strcmp(buffer, "START_GAME") == 0)
         {
-            //std::vector<int>
-            int questionIndex = 0;
+            std::vector<int> questionIndices=genRandomQuestionsList(NUM_QUESTIONS_PER_PLAY,questions.size()-1);
+            int questionCount = 0;
             
             while (true) {
                 // Check if all questions have been sent
-                if (questionIndex >= questions.size()) {
+                if (questionCount >= NUM_QUESTIONS_PER_PLAY) {
                     if (send(clientSocket, "GAME_WON", strlen("GAME_WON"), 0) <= 0) {
                         std::cout << "Error sending GAME_WON message" << std::endl;
                         break;
@@ -105,7 +125,7 @@ void handleClient(int clientSocket) {
 
 
                 // Get the current question
-                Question currentQuestion = questions[questionIndex];
+                Question currentQuestion = questions[questionIndices[questionCount]];
 
 
                 // Construct the message containing the question content and answer options
@@ -167,7 +187,7 @@ void handleClient(int clientSocket) {
 
 
                 // Move to the next question
-                questionIndex++;
+                questionCount++;
             }
         }
         else if (strcmp(buffer, "GET_SCOREBOARD") == 0)
@@ -199,8 +219,6 @@ void handleClient(int clientSocket) {
                 break;
             }
         }
-
-       
     }
 
 
