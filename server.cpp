@@ -16,7 +16,7 @@
 
 #define MAX_CLIENTS 20
 #define BUFFER_SIZE 1024
-#define NUM_QUESTIONS_PER_PLAY 3
+#define NUM_QUESTIONS_PER_PLAY 5
 
 using json = nlohmann::json;
 
@@ -26,18 +26,46 @@ struct Client {
     int socket;
     std::string name;
     int score;
+    bool fiftyFiftyUsed;
+    bool phoneAFriendUsed;
+    bool askTheAudienceUsed;
+};
+
+
+struct Game {
+    Client client1;
+    Client client2;
+    int score1;
+    int score2;
+    std::chrono::system_clock::time_point datetime;
+
 };
 
 
 struct Question {
     int level;
     std::string content;
-    std::unordered_map<std::string,std::string> answerList;
+    std::unordered_map<std::string, std::string> answerList;
     std::string correctAnswer;
 };
 
+
 std::vector<Question> questions;
 std::vector<Client> clients;
+
+void sendQuestion(Client& client, const Question& question) {
+    std::string message = "Question Level: " + std::to_string(question.level) + "\n";
+    message += question.content + "\n";
+    for (const auto& pair : question.answerList) {
+        message += pair.first + ": " + pair.second + "\n";
+    }
+
+    message += "Or E to use a lifeline.";
+    if (send(client.socket, message.c_str(), message.length(), 0) <= 0) {
+        std::cerr << "Error sending question" << std::endl;
+    }
+}
+
 
 std::vector<int> genRandomQuestionsList(int k, int n) {
     std::vector<int> questionList;
@@ -56,6 +84,123 @@ std::vector<int> genRandomQuestionsList(int k, int n) {
     }
 
     return questionList;
+}
+
+void sendPlayerList(Client& client) {
+    std::string message = "LIST ONLINE PLAYERS:\n";
+    for (const auto& c : clients) {
+        message += c.name + "\n";
+    }
+
+    if (send(client.socket, message.c_str(), message.length(), 0) <= 0) {
+        std::cerr << "Error sending player list" << std::endl;
+    }
+}
+
+void handleGame(Client& client) {
+    int questionCount = 0;
+    int score = 0;
+
+    std::vector<int> questionIndices=genRandomQuestionsList(NUM_QUESTIONS_PER_PLAY,questions.size()-1);
+
+    while (true) {
+        // Check if all questions have been sent
+        if (questionCount >= NUM_QUESTIONS_PER_PLAY) {
+            std::string message = "GAME_WON";
+            if (send(client.socket, message.c_str(), message.length(), 0) <= 0) {
+                std::cerr << "Error sending GAME_WON message" << std::endl;
+            }
+
+            // Update score and save it
+            client.score += score;
+            return;
+        }
+
+        // Get the current question
+        Question currentQuestion = questions[questionIndices[questionCount]];
+
+        // Send the question to the client
+        sendQuestion(client, currentQuestion);
+
+        // Receive client's answer
+        char buffer[BUFFER_SIZE];
+        memset(buffer, 0, BUFFER_SIZE);
+        if (recv(client.socket, buffer, BUFFER_SIZE, 0) <= 0) {
+            std::cerr << "Error receiving answer" << std::endl;
+            return;
+        }
+
+        // Check client's answer
+        std::string clientAnswer = buffer;
+        if (clientAnswer == currentQuestion.correctAnswer) {
+            std::cout << "Client answered correctly" << std::endl;
+            score++;
+        } else {
+            std::cout << "Client answered incorrectly" << std::endl;
+
+            // Send the GAME_OVER message to the client
+            std::string gameOverMessage = "GAME_OVER";
+            if (send(client.socket, gameOverMessage.c_str(), gameOverMessage.length(), 0) <= 0) {
+                std::cerr << "Error sending GAME_OVER message" << std::endl;
+            }
+
+            memset(buffer, 0, BUFFER_SIZE);
+            if (recv(client.socket, buffer, BUFFER_SIZE, 0) <= 0) {
+                std::cerr << "Error receiving RECV_GAME_OVER message" << std::endl;
+                return;
+            }
+
+            // Send the score message to the client
+            std::string scoreMessage = "SCORE: " + std::to_string(score);
+            if (send(client.socket, scoreMessage.c_str(), scoreMessage.length(), 0) <= 0) {
+                std::cerr << "Error sending SCORE message" << std::endl;
+            }
+
+            // Update score and save it
+            client.score += score;
+            return;
+        }
+
+        // Move to the next question
+        questionCount++;
+    }
+}
+
+void deleteClient(Client& client) {
+    // Close the client's socket
+    close(client.socket);
+
+    // Remove the client from the clients vector
+    mutex.lock();
+    clients.erase(std::remove_if(clients.begin(), clients.end(), [&client](const Client& c) {
+        return c.socket == client.socket;
+    }), clients.end());
+    mutex.unlock();
+
+    std::cout << "Client disconnected: " << client.name << std::endl;
+}
+
+
+void handleRequest(Client& client, const std::string& request) {
+    if (request == "START_GAME") {
+        handleGame(client);
+    } 
+    else if (request == "DISCONNECT")
+    {
+        deleteClient(client);
+    }
+    
+    else if (request == "GET_PLAYERS") {
+        sendPlayerList(client);
+    }
+
+    // else if (request == "GET_SCOREBOARD") {
+    //     sendScoreboard(client);
+    // } else if (request == "CHALLENGE") {
+    //     handleChallenge(client);
+    // } else {
+    //     // Handle other requests
+    // }
 }
 
 void handleClient(int clientSocket) {
@@ -90,148 +235,20 @@ void handleClient(int clientSocket) {
 
     std::cout << "Client connected: " << client.name << std::endl;
 
-
-    // Game loop
     while (true) {
         memset(buffer, 0, BUFFER_SIZE);
-        std::cout << buffer << std::endl;
         if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
             std::cout << "Error receiving client message" << std::endl;
             close(clientSocket);
             return;
         }
-        else if (strcmp(buffer, "START_GAME") == 0)
-        {
-            std::vector<int> questionIndices=genRandomQuestionsList(NUM_QUESTIONS_PER_PLAY,questions.size()-1);
-            int questionCount = 0;
-            
-            while (true) {
-                // Check if all questions have been sent
-                if (questionCount >= NUM_QUESTIONS_PER_PLAY) {
-                    if (send(clientSocket, "GAME_WON", strlen("GAME_WON"), 0) <= 0) {
-                        std::cout << "Error sending GAME_WON message" << std::endl;
-                        break;
-                    }
-                    std::ofstream outputFile("scoreboard.txt", std::ios::app);
-                    if (outputFile.is_open()) {
-                        std::string content = client.name+","+std::to_string(client.score);
-                        outputFile << content << std::endl;
-                        outputFile.close();
-                    } else {
-                    std::cout << "Failed to open the file." << std::endl;
-                    }
-                    break;
-                }
 
-
-                // Get the current question
-                Question currentQuestion = questions[questionIndices[questionCount]];
-
-
-                // Construct the message containing the question content and answer options
-                std::string message = "Question Level: " + std::to_string(currentQuestion.level) + "\n";
-                message += currentQuestion.content + "\n";
-
-                for (const auto& pair : currentQuestion.answerList) {
-                    message += pair.first +": " +pair.second + "\n";
-                }
-
-
-
-                // Send the message to the client
-                if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
-                    std::cout << "Error sending question" << std::endl;
-                    break;
-                }
-
-
-                // Receive client's answer
-                char buffer[BUFFER_SIZE];
-                memset(buffer, 0, BUFFER_SIZE);
-                if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
-                    std::cout << "Error receiving answer" << std::endl;
-                    break;
-                }
-
-
-                // Check client's answer
-                std::string clientAnswer = buffer;
-                if (clientAnswer == currentQuestion.correctAnswer) {
-                    std::cout << "Client answered correctly" << std::endl;
-                    client.score++;
-                } else {
-                    std::cout << "Client answered incorrectly" << std::endl;
-
-                    // Send the GAME_OVER message to the client
-                    if (send(clientSocket, "GAME_OVER", strlen("GAME_OVER"), 0) <= 0) {
-                        std::cout << "Error sending GAME_OVER message" << std::endl;
-                        break;
-                    }
-
-                    std::string score_msg = "SCORE: " + std::to_string(client.score);
-                    // Send the score message to the client
-                    if (send(clientSocket, score_msg.c_str(), score_msg.length(), 0) <= 0) {
-                        std::cout << "Error sending SCORE message" << std::endl;
-                        break;
-                    }
-                    std::ofstream outputFile("scoreboard.txt", std::ios::app);
-                    if (outputFile.is_open()) {
-                        std::string content = client.name+","+std::to_string(client.score);
-                        outputFile << content << std::endl;
-                        outputFile.close();
-                    } else {
-                    std::cout << "Failed to open the file." << std::endl;
-                    }
-                    break;
-                }
-
-
-                // Move to the next question
-                questionCount++;
-            }
-        }
-        else if (strcmp(buffer, "GET_SCOREBOARD") == 0)
-        {
-            std::string message = "USER, SCORE \n";
-            std::ifstream inputFile("scoreboard.txt");
-            if (inputFile.is_open()) {
-                std::string line;
-                while (std::getline(inputFile, line)) {
-                    message += line +"\n";
-                }
-                if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
-                    std::cout << "Error sending SCORE message" << std::endl;
-                    break;
-                }
-                inputFile.close();
-            } else {
-                std::cout << "Failed to open the file." << std::endl;
-            }
-        }
-        else if (strcmp(buffer, "GET_PLAYERS") == 0)
-        {
-            std::string message = "LIST ONLINE PLAYERS \n";
-            for (const auto& client : clients) {
-                message += client.name +"\n";
-            }
-            if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
-                std::cout << "Error sending PLAYERS message" << std::endl;
-                break;
-            }
-        }
+        std::string request = buffer;
+        handleRequest(client, request);
     }
 
-
-    // Wait for a short duration before closing the socket
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    close(clientSocket);
-
-    // Remove the client from the list
-    mutex.lock();
-    clients.erase(std::remove_if(clients.begin(), clients.end(),[clientSocket](const Client& c) { return c.socket == clientSocket; }), clients.end());
-    mutex.unlock();
+    // ...
 }
-
 
 int main() {
     // Read questions file

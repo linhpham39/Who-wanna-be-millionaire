@@ -49,6 +49,26 @@
             "D": "Pacific Ocean",
             "correct_answer": "D",
             "level": 5            
-        }   
+        },
+        {
+            "id": "6",
+            "Question": "What is the capital of England?",
+            "A": "Paris",
+            "B": "London",
+            "C": "Berlin",
+            "D": "Madrid",
+            "correct_answer": "B",
+            "level": 1
+        },
+        {
+            "id": "7",
+            "Question": "What is the capital of Germany?",
+            "A": "Paris",
+            "B": "London",
+            "C": "Berlin",
+            "D": "Madrid",
+            "correct_answer": "C",
+            "level": 1
+        }
     ]
 }

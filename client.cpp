@@ -5,102 +5,101 @@
 #include <unistd.h>
 #include <vector>
 #include <sstream>
+#include <chrono>
+#include <thread>
 
 #define BUFFER_SIZE 1024
 
-struct Question {
+struct Question
+{
     int level;
     std::string content;
     std::vector<std::string> answerList;
 };
 
-
-Question decodeQuestion(const std::string& message) {
+Question decodeQuestion(const std::string &message)
+{
     Question question;
     std::istringstream iss(message);
     std::string line;
-
 
     // Read the question level
     std::getline(iss, line);
     question.level = std::stoi(line.substr(line.find(":") + 1));
 
-
     // Read the question content
     std::getline(iss, question.content);
 
-
     // Read the answer options
-    while (std::getline(iss, line)) {
+    while (std::getline(iss, line))
+    {
         question.answerList.push_back(line);
     }
-
 
     return question;
 }
 
-
-int main() {
+int main()
+{
     int clientSocket;
     int port = 5555;
     std::string serverAddress = "127.0.0.1";
 
-
     // Create socket
-    if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
         std::cerr << "Socket creation failed" << std::endl;
         return -1;
     }
 
-
-    struct sockaddr_in serverAddr {};
+    struct sockaddr_in serverAddr
+    {
+    };
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
 
-
     // Convert server address from string to network address structure
-    if (inet_pton(AF_INET, serverAddress.c_str(), &(serverAddr.sin_addr)) <= 0) {
+    if (inet_pton(AF_INET, serverAddress.c_str(), &(serverAddr.sin_addr)) <= 0)
+    {
         std::cerr << "Invalid server address" << std::endl;
         return -1;
     }
 
-
     // Connect to the server
-    if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
+    {
         std::cerr << "Connection failed" << std::endl;
         return -1;
     }
 
-
     std::cout << "Connected to the server" << std::endl;
-
 
     // Receive welcome message from the server
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
-    if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+    if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+    {
         std::cerr << "Error receiving welcome message" << std::endl;
         close(clientSocket);
         return -1;
     }
 
-
     std::cout << buffer << std::endl;
-
 
     // Send client's name to the server
     std::string name;
     std::cout << "Enter your name: ";
     std::getline(std::cin, name);
-    if (send(clientSocket, name.c_str(), name.length(), 0) <= 0) {
+    if (send(clientSocket, name.c_str(), name.length(), 0) <= 0)
+    {
         std::cerr << "Error sending name" << std::endl;
         close(clientSocket);
         return -1;
     }
 
-
     // Game loop
-    while (true) {
+    while (true)
+    {
         int choice;
         std::cout << "Who want to be a millionaire" << std::endl;
         std::cout << "1. Start Game" << std::endl;
@@ -114,37 +113,55 @@ int main() {
         switch (choice)
         {
         case 1:
-            if (send(clientSocket, "START_GAME", strlen("START_GAME"), 0) <= 0) {
+            if (send(clientSocket, "START_GAME", strlen("START_GAME"), 0) <= 0)
+            {
                 std::cerr << "Error sending START_GAME message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
 
-
             while (true)
             {
                 memset(buffer, 0, BUFFER_SIZE);
-                if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+                if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+                {
                     std::cerr << "Error receiving server message" << std::endl;
-                    close(clientSocket);
-                    return -1;
+                    break;
                 }
-                else if(strcmp(buffer, "GAME_OVER") == 0){
+                else if (strcmp(buffer, "GAME_OVER") == 0)
+                {
                     std::cout << "You answered incorrectly. " << buffer << std::endl;
-                    memset(buffer, 0, BUFFER_SIZE);
-                    if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
-                        std::cerr << "Error receiving score message" << std::endl;
+                    
+                    if (send(clientSocket, "RECV_GAME_OVER", strlen("RECV_GAME_OVER"), 0) <= 0)
+                    {
+                        std::cerr << "Error sending RECV_GAME_OVER message" << std::endl;
                         close(clientSocket);
                         return -1;
                     }
-                    std::cout << buffer << std::endl;
+
+                    memset(buffer, 0, BUFFER_SIZE);
+                    if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+                    {
+                        std::cerr << "Error receiving score message" << std::endl;
+                        break;
+                    }
+
+                    std::string scoreMessage = buffer;
+                    if (scoreMessage.find("SCORE:") == 0)
+                    {
+                        int score = std::stoi(scoreMessage.substr(6));
+                        std::cout << "Your final score: " << score << std::endl;
+                    }
+
                     break;
                 }
-                else if(strcmp(buffer, "GAME_WON") == 0){
-                    std::cout << "Congratulations!  YOU WON! " << std::endl;
+                else if (strcmp(buffer, "GAME_WON") == 0)
+                {
+                    std::cout << "Congratulations! You won!" << std::endl;
                     break;
                 }
-                else{
+                else
+                {
                     // Decode the server's question message
                     Question question = decodeQuestion(buffer);
 
@@ -152,78 +169,86 @@ int main() {
                     std::cout << "Level: " << question.level << std::endl;
                     std::cout << "Question: " << question.content << std::endl;
                     std::cout << "Options:" << std::endl;
-                    for (const std::string& option : question.answerList) {
+                    for (const std::string &option : question.answerList)
+                    {
                         std::cout << option << std::endl;
                     }
 
                     std::string clientAnswer;
                     std::getline(std::cin, clientAnswer);
-                    if (send(clientSocket, clientAnswer.c_str(), clientAnswer.length(), 0) <= 0) {
+                    if (send(clientSocket, clientAnswer.c_str(), clientAnswer.length(), 0) <= 0)
+                    {
                         std::cerr << "Error sending answer" << std::endl;
-                        close(clientSocket);
-                        return -1;
+                        break;
                     }
-                }   
+                }
             }
-           
+
             break;
         case 2:
-            if (send(clientSocket, "GAME_CHALLENGE", strlen("GAME_CHALLENGE"), 0) <= 0) {
+            if (send(clientSocket, "GAME_CHALLENGE", strlen("GAME_CHALLENGE"), 0) <= 0)
+            {
                 std::cerr << "Error sending GAME_CHALLENGE message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
             memset(buffer, 0, BUFFER_SIZE);
-            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+            {
                 std::cerr << "Error receiving server message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
-            std::cout<<buffer<<std::endl;
+            std::cout << buffer << std::endl;
             break;
             break;
         case 3:
-            if (send(clientSocket, "GET_SCOREBOARD", strlen("GET_SCOREBOARD"), 0) <= 0) {
+            if (send(clientSocket, "GET_SCOREBOARD", strlen("GET_SCOREBOARD"), 0) <= 0)
+            {
                 std::cerr << "Error sending GET_SCOREBOARD message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
             memset(buffer, 0, BUFFER_SIZE);
-            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+            {
                 std::cerr << "Error receiving server message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
-            std::cout<<buffer<<std::endl;
+            std::cout << buffer << std::endl;
             break;
         case 4:
-            if (send(clientSocket, "GET_PLAYERS", strlen("GET_PLAYERS"), 0) <= 0) {
+            if (send(clientSocket, "GET_PLAYERS", strlen("GET_PLAYERS"), 0) <= 0)
+            {
                 std::cerr << "Error sending GET_PLAYERS message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
             memset(buffer, 0, BUFFER_SIZE);
-            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+            if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0)
+            {
                 std::cerr << "Error receiving server message" << std::endl;
                 close(clientSocket);
                 return -1;
             }
-            std::cout<<buffer<<std::endl;
-            break;        
-
+            std::cout << buffer << std::endl;
+            break;
 
         default:
+            if (send(clientSocket, "DISCONNECT", strlen("DISCONNECT"), 0) <= 0)
+            {
+                std::cerr << "Error sending DISCONNECT message" << std::endl;
+                close(clientSocket);
+                return -1;
+            }
             close(clientSocket);
             return 0;
         }
-
-
     }
-
 
     // Close the client socket
     close(clientSocket);
-
 
     return 0;
 }

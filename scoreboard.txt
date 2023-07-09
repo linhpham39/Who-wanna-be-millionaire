@@ -8,3 +8,4 @@ dkt,1
 dkt,1
 kt,1
 ktt,3
+kluong,1
